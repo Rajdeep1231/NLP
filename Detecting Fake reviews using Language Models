@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep 23 17:05:10 2019
+
+@author: rajdeepghosh
+"""
+
+import pandas as pd
+import numpy as np
+import math
+
+
+#Open the files
+
+
+d_train = open("deceptive.txt")
+t_train=open("truthful.txt")
+d_val = open("deceptiveval.txt")
+t_val = open("truthfulval.txt")
+test=open("test.txt")
+
+
+# Getting individual words from the file
+
+def individualwords(file):
+    allreview = file.readlines()
+    reviews = []
+    for word in allreview: 
+         reviews.append(word.split(' '))
+    return reviews
+
+
+truth_train=individualwords(t_train)
+deceptive_train=individualwords(d_train)
+truth_val=individualwords(t_val)
+deceptive_val=individualwords(d_val)
+testdata=individualwords(test)
+
+
+#Setting words to lowercase using list comprehension
+
+def lowercase(data):
+    newdata=[]
+    for sentence in data:
+         words = [word.lower() for word in sentence]
+         newdata.append(words)
+    return newdata    
+            
+            
+      
+
+updated_truth_train = lowercase(truth_train)
+updated_deceptive_train=lowercase(deceptive_train)
+updated_truth_val=lowercase(truth_val)
+updated_deceptive_val=lowercase(deceptive_val)
+updated_test=lowercase(testdata)
+
+
+
+
+#Get Unigram and Unigram Count
+
+
+
+def Unigram(review):
+    UnigramList={}
+    for sentence in review:
+        for word in sentence:
+            if word not in UnigramList:
+                UnigramList[word]=0
+            UnigramList[word]+=1
+    return UnigramList
+
+
+def UnigramCount(review):
+    count=0
+    for sentence in review:
+        for word in sentence:
+            count += 1
+    return count
+
+
+
+truth_train_unigrams = Unigram(updated_truth_train)
+deceptive_train_unigrams = Unigram(updated_deceptive_train)
+
+
+truth_train_Unigram_Count = UnigramCount(updated_truth_train)
+deceptive_train_Unigram_Count= UnigramCount(updated_deceptive_train)
+
+
+
+#Get Bigram and Count
+
+
+def Bigram(review):
+    BigramList = {}
+    for sentence in review: 
+        combination = [(sentence[i], sentence[i + 1]) for i in range(len(sentence) - 1)]
+        for  duo in combination:
+            Bigram = duo[0] + " " + duo[1]
+            if Bigram not in BigramList:
+                BigramList[Bigram]=0
+            BigramList[Bigram] += 1
+    return BigramList       
+         
+            
+truth_train_bigrams= Bigram(updated_truth_train)
+deceptive_train_bigrams = Bigram(updated_deceptive_train)  
+
+def BigramCount(BigramList,review):
+    count = sum(BigramList.values())
+    return count
+    
+truth_train_Bigram_Count = BigramCount(truth_train_bigrams,updated_truth_train)
+deceptive_train_Bigram_Count= BigramCount(deceptive_train_bigrams,updated_deceptive_train)
+
+
+
+#Get Unigram and Bigram Probabilities
+
+
+def UnigramProbability(Unigram,count):
+    UnigramProbability={}
+    for i in Unigram:
+        UnigramProbability[i] = np.log(Unigram[i]/count)
+    return UnigramProbability
+
+    
+truth_train_Unigram_Probability = UnigramProbability(truth_train_unigrams,truth_train_Unigram_Count)  
+deceptive_train_Unigram_Probability = UnigramProbability(deceptive_train_unigrams,deceptive_train_Unigram_Count)
+
+
+def BigramProbability(Bigram,Unigram):
+    BigramProbability={}
+    for i in Bigram:
+        BigramProbability[i] = np.log(Bigram[i]/Unigram[i.split(" ")[0]])
+    return BigramProbability    
+
+truth_train_Bigram_Probability = BigramProbability(truth_train_bigrams,truth_train_unigrams)
+deceptive_train_Bigram_Probability = BigramProbability(deceptive_train_bigrams,deceptive_train_unigrams)
+        
+
+
+
+#Value of unique values in train deceptive and train truthful
+
+truth_train_Dict_count = len(truth_train_unigrams)
+deceptive_train_Dict_count = len(deceptive_train_unigrams)
+truth_train_Dict_bigram_count=len(truth_train_bigrams)
+deceptive_train_Dict_bigram_count=len(deceptive_train_bigrams)
+
+
+#Unknown Word Handling
+
+def UnknownWordHandler(data,unigram):
+    unigram["NN"] = 0
+    for review in data:
+        for i in range(0,len(review)):
+            if review[i] not in unigram:
+                review[i] = "NN"
+                unigram["NN"] += 1
+    return data,unigram            
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Smoothing Unigram
+
+
+
+def AdditiveSmoothingUnigram(review,Unigram,count,distinct):
+    SmoothedUnigramProb={}
+    for sentence in review:
+        for word in sentence:
+            if word in Unigram.keys():
+                SmoothedUnigramProb[word] = np.log((1+ Unigram[word])/(count+distinct))
+            else:
+                SmoothedUnigramProb[word] = np.log(1/(count+distinct))
+    return SmoothedUnigramProb            
+
+
+
+
+truth_val_Unigrams_Probability = AdditiveSmoothingUnigram(updated_truth_val,truth_train_unigrams,truth_train_Unigram_Count,truth_train_Dict_count)
+deceptive_val_Unigrams_Probability = AdditiveSmoothingUnigram(updated_truth_val,deceptive_train_unigrams,deceptive_train_Unigram_Count,deceptive_train_Dict_count)
+truth_val_Unigrams_Probability1 = AdditiveSmoothingUnigram(updated_deceptive_val,truth_train_unigrams,truth_train_Unigram_Count,truth_train_Dict_count)
+deceptive_val_Unigrams_Probability1 = AdditiveSmoothingUnigram(updated_deceptive_val,deceptive_train_unigrams,deceptive_train_Unigram_Count,deceptive_train_Dict_count)
+
+
+
+#Test Smoothing Unigram and Bigram
+
+
+truth_test_Unigrams_Probabilty=AdditiveSmoothingUnigram(updated_test,truth_train_unigrams,truth_train_Unigram_Count,truth_train_Dict_count)
+deceptive_test_Unigrams_Probability = AdditiveSmoothingUnigram(updated_test,deceptive_train_unigrams,deceptive_train_Unigram_Count,deceptive_train_Dict_count)
+
+#Perplexity per review
+
+def UnigramProbabilityforPerplexity(review,dictionary):
+    total = 0
+    for word in review:
+        total = total + dictionary[word]
+    return total    
+        
+  
+
+def Perplexity(review,smootheddictionary,n_gram_probability):
+    return np.exp((-1/len(review))*n_gram_probability(review,smootheddictionary))
+
+
+
+
+#Unigram Perplexity and Accuracy based on Validation Set
+
+dict_truthful_output={}
+dict_deceptive_output={}
+dict_test_output={}
+#Truth Validation Set
+
+for i in range(0,len(updated_truth_val)):
+    if Perplexity(updated_truth_val[i],truth_val_Unigrams_Probability,UnigramProbabilityforPerplexity) < Perplexity(updated_truth_val[i],deceptive_val_Unigrams_Probability,UnigramProbabilityforPerplexity):
+        dict_truthful_output[i] = 1
+    else:
+        dict_truthful_output[i] = 0
+  
+    
+
+
+Accuracy_truth_Unigram_Val = (sum(dict_truthful_output.values())/len(updated_truth_val))
+
+print(Accuracy_truth_Unigram_Val)       
+  
+    
+    
+#Deceptive Validation Set
+
+    
+for i in range(0,len(updated_deceptive_val)):
+    if Perplexity(updated_deceptive_val[i],truth_val_Unigrams_Probability1,UnigramProbabilityforPerplexity) > Perplexity(updated_deceptive_val[i],deceptive_val_Unigrams_Probability1,UnigramProbabilityforPerplexity):
+        dict_deceptive_output[i] = 1
+    else:
+         dict_deceptive_output[i]=0
+        
+  
+    
+Accuracy_deceptive_Unigram_Val = (sum(dict_deceptive_output.values())/len(updated_deceptive_val))
+print(Accuracy_deceptive_Unigram_Val)  
+
+
+
+        
+
+
+for i in range(0,len(updated_test)):
+    if Perplexity(updated_test[i],truth_test_Unigrams_Probabilty,UnigramProbabilityforPerplexity) < Perplexity(updated_test[i],deceptive_test_Unigrams_Probability,UnigramProbabilityforPerplexity):
+       dict_test_output[i] = 0
+    else:
+        dict_test_output[i] = 1
+    
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

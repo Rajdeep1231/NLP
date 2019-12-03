@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 15 00:03:11 2019
+
+@author: rajdeepghosh
+"""
+
+#Importing Libraries 
+
+
+import numpy as np
+import pandas as pd
+import nltk 
+
+from nltk import word_tokenize
+
+#Importing datasets
+
+df_train=pd.read_csv('train.csv',encoding='ISO-8859-1')
+df_val=pd.read_csv('val.csv',encoding='ISO-8859-1')
+df_test=pd.read_csv('test_no_label.csv',encoding='ISO-8859-1')
+
+#Extracting the columns in the dataframes into lists
+sentence_ls=df_train['sentence']
+pos_seq_ls=df_train['pos_seq']
+label_seq_ls=df_train['label_seq']
+
+sentence_ls_val=df_val['sentence']
+pos_seq_ls_val=df_val['pos_seq']
+label_seq_ls_val=df_val['label_seq']
+
+sentence_ls_test=df_test['sentence']
+pos_seq_ls_test=df_test['pos_seq']
+
+
+#States for this problem
+states=[0,1]
+
+
+
+#Tokenizing the states into a list
+
+def tokenize_freqcount_label(label_seq_ls):
+    str_label=""
+    for i in range(len(label_seq_ls)):
+        label_seq_ls[i]=label_seq_ls[i].replace(","," ")
+        label_seq_ls[i]=label_seq_ls[i].replace("[","")
+        label_seq_ls[i]=label_seq_ls[i].replace("]","")
+        words_label=word_tokenize(label_seq_ls[i])
+        s=' '
+        if str_label=="":
+            str_label=s.join(words_label)
+        else:
+            str_label=str_label+" *eos* " +s.join(words_label)
+    tokens_label=str_label.split(' ')
+    word_set=set(tokens_label)
+    unique_words_label=list(word_set) 
+    
+    dict_label_uni={}
+    for i in range(len(unique_words_label)):
+        #Creating a dictionary for the unigrams in the sentences
+        a=unique_words_label[i]
+        b=str_label.count(a) 
+        dict_label_uni[a]=b
+    del dict_label_uni['*eos*']
+    return(tokens_label,dict_label_uni)
+
+token_label=[]
+Unigram_label={}
+tokens_label, Unigram_label = tokenize_freqcount_label(label_seq_ls) 
+
+token_label_val=[]
+Unigram_label_val={}
+tokens_label_val, Unigram_label_val = tokenize_freqcount_label(label_seq_ls_val)
+
+
+
+
+
+#Tokenizing the sentences into words and storing them in a list
+
+def tokenize_freqcount_Sentence(sentence_ls):
+    str_sentence=""
+    for i in range(len(sentence_ls)):
+        words_sentence=sentence_ls[i].split(' ')
+        s=' '
+        if str_sentence=="":
+            str_sentence= s.join(words_sentence)
+        else:
+            str_sentence=str_sentence+ " *eos* " +s.join(words_sentence)
+        str_sentence=str_sentence.lower()    
+  
+    tokens_sentence=str_sentence.split(' ')
+    word_set=set(tokens_sentence)
+    unique_words_sentence=list(word_set)
+    
+    dict_sentence_uni={}
+    #Getting the unique words and their frequencies 
+    for i in range(len(unique_words_sentence)):
+        #Creating a dictionary for the unigrams in the sentences
+        a=unique_words_sentence[i]
+        b=str_sentence.count(a) 
+        dict_sentence_uni[a]=b
+    del dict_sentence_uni['*eos*']
+    return(tokens_sentence, dict_sentence_uni)
+    
+
+tokens_sentence=[]
+Unigram_sentence={}
+tokens_sentence, Unigram_sentence=tokenize_freqcount_Sentence(sentence_ls)
+
+tokens_sentence_val=[]
+Unigram_sentence_val={}
+tokens_sentence_val, Unigram_sentence_val=tokenize_freqcount_Sentence(sentence_ls_val)
+
+tokens_sentence_test=[]
+Unigram_sentence_test={}
+tokens_sentence_test, Unigram_sentence_test=tokenize_freqcount_Sentence(sentence_ls_test) 
+
+
+
+#Bigrams for the states, 0 and 1.
+
+def BigramLabels(data):
+    BigramDict = {}
+    Bigram = list(nltk.bigrams(data))
+    for bigram in Bigram:
+        if bigram not in BigramDict:
+            BigramDict[bigram]=0
+        BigramDict[bigram] += 1
+    return BigramDict
+
+
+bigram_labels = BigramLabels(tokens_label)
+del bigram_labels[('*eos*', '0')]
+del bigram_labels[('*eos*', '1')]
+del bigram_labels[('1', '*eos*')]
+del bigram_labels[('0', '*eos*')]
+
+
+
+#Transition Probabilities
+
+def TransitionProb(bigrams,Unigram):
+    TransitionProb={}
+    for bigram in list(bigram_labels.keys()):
+        TransitionProb[bigram] = np.log(bigram_labels[bigram]/Unigram[bigram[0]])
+    return TransitionProb
+
+TransitionProbability = TransitionProb(bigram_labels,Unigram_label)    
+
+
+
+#Bigram between Words and Labels
+
+def BigramWordsandLabels(tokens_label,tokens_sentence):
+    BigramWordsLabels={}
+    for i in range(0,len(tokens_label)):
+        Bigram = tokens_sentence[i] +" "+ tokens_label[i]
+        if Bigram not in BigramWordsLabels:
+            BigramWordsLabels[Bigram]=0
+        BigramWordsLabels[Bigram] += 1
+    return BigramWordsLabels
+
+
+BigramWordsLabels_train =BigramWordsandLabels(tokens_label,tokens_sentence)
+BigramWordsLabels_val = BigramWordsandLabels(tokens_label_val,tokens_sentence_val)
+
+
+
+#Geting the sentences in a list from the test dataset
+
+Listofsentences1 = list(sentence_ls_test)
+List_test=[]
+for i in Listofsentences1:
+    List_test.append((i.split(" ")))
+    
+#Lowercase on the above list    
+    
+for i in List_test:
+    for j in range(0,len(i)):
+        i[j] = i[j].lower()
+    
+  
+#Unknown n-gram handling
+
+def Unknownngram(BigramWordsLabels_train,List2):
+    for sentence in List2:
+        for word in sentence:
+            x=str(str(word)+" "+str(0))
+            y=str(str(word)+" "+str(1))
+            if  x not in BigramWordsLabels_train.keys():
+                BigramWordsLabels_train[str(str(word)+" "+str(0))] = 0
+                BigramWordsLabels_train[str(str(word)+" "+str(0))] += 1
+            if  y not in BigramWordsLabels_train.keys():
+                BigramWordsLabels_train[str(str(word)+" "+str(1))] = 0
+                BigramWordsLabels_train[str(str(word)+" "+str(1))] += 1
+    return BigramWordsLabels_train
+            
+
+
+BigramWordsLabels_train_Smoothed2 = Unknownngram(BigramWordsLabels_train,List_test)
+del BigramWordsLabels_train_Smoothed2['*eos* *eos*']
+
+
+
+
+
+
+#Emission Probabilties
+
+def EmissionProbabilities(Unigrams, Dictionaries):
+    EmissionProb={}
+    for bigram in list(Dictionaries.keys()):
+        EmissionProb[bigram] = np.log(Dictionaries[bigram]/Unigrams[bigram.split(" ")[1]])
+    return EmissionProb
+
+    
+EmissionProb = EmissionProbabilities(Unigram_label,BigramWordsLabels_train_Smoothed2)       
+
+
+
+#Probabilities of 0 and 1
+
+ProbStates={}
+P_0 = np.log(103571/(103571+13051))
+P_1 = np.log(13051/(103571+13051))
+ProbStates[0] = P_0
+ProbStates[1] = P_1
+
+#Viterbi decoding
+
+def Viterbi(List_sentences,states,ProbStates,EmissionProb,TransitionProb):
+    list_Sequence=[]
+    list_BackPointer=[]
+    for sentence in List_sentences:
+        ScoreMatrix = np.zeros((len(states),len(sentence)))
+        Backpointer = np.zeros((len(states),len(sentence)))
+        TempMatrix = np.zeros((2,2))
+        Sequence = np.zeros((len(sentence)))
+       
+        for i in states:
+            ScoreMatrix[i][0] = ProbStates[i]+EmissionProb[str(sentence[0]+" "+str(i))]
+            Backpointer[i][0] = 0
+        for n in range(1,len(sentence)):
+            for i in states:
+                TempMatrix[0][i] = ScoreMatrix[i][n-1]+TransitionProb[('0',str(i))]+EmissionProb[str(sentence[n]+" "+str(0))]
+                TempMatrix[1][i] = ScoreMatrix[i][n-1]+TransitionProb[('1',str(i))]+EmissionProb[str(sentence[n]+" "+str(1))]
+            for i in states:
+                ScoreMatrix[i][n]= max(TempMatrix[i][0],TempMatrix[i][1])
+                if TempMatrix[i][0] > TempMatrix[i][1]:
+                    Backpointer[i][n] = 0
+                else:
+                    Backpointer[i][n] = 1
+            if n == len(sentence)-1:
+                if ScoreMatrix[0][n] > ScoreMatrix[1][n]:
+                    Sequence[-1]= 0
+                else:
+                    Sequence[-1]=1
+        for i in range(len(sentence)-2,-1,-1):
+            Sequence[i] = Backpointer[int(Sequence[i+1]),[i+1]]      
+        list_Sequence.append(Sequence)   
+        list_BackPointer.append(Backpointer)      
+    return list_Sequence,list_BackPointer
+
+Sequence,Back= Viterbi(List_test,states,ProbStates,EmissionProb,TransitionProbability)        
+
+
+
+
+
+
+
+#Storing the sequence in a List
+
+
+Pred = []
+for i in Sequence:
+    for j in i:
+        Pred.append(int(j))
+myarray = np.asarray(Pred)
+
+#Storing the index so as to make the csv file
+
+xy=list(range(1,50176))
+xy=np.asarray(xy)    
+    
+    
+#Output and CSV File
+ 
+output = pd.DataFrame({'idx': xy,
+                       'label': myarray})
+    
+    
+output.to_csv('submission.csv', index=False)
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+    
